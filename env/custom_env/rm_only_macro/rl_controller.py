@@ -1,26 +1,20 @@
 import numpy as np
-import traci
 
 from ..sumo_env import SumoEnv
 
 
 class RLController(SumoEnv):
-    """Variant: joint ramp metering + lane-1 VSL control with macro-only state.
+    """Variant: ramp metering only (no lane control), macro-only state.
 
-    Combines:
-        - The 14-d macro observation from the "macro with lane" variant (MLP).
-        - The 16-action joint space + lane-VSL actuation from the "lane_control"
-          variant.
-
-    Action space is 16 = 8 green-time choices x 2 lane states.
-        green_idx = action % 8   -> green time in {5,10,...,40} s
-        lane_idx  = action // 8  -> 0 = lane open, 1 = lane closed (low VSL)
-    Lane control is applied to `acceleration_area_1` (mainline lane closest to
-    the ramp).
+    Designed as an equitable ablation control for
+    `rm_lcc_macro_with_setMaxSpeed`:
+        - Same 7 aggregate macro features + `last_green_time` in the state.
+        - Same reward formula and weights.
+        - Same end-of-cycle aggregation (mean speed interval, queue formula).
+    Only the actuator differs: this variant has NO VSL/lane control, so the
+    action space is 8 (green-time choices) instead of 16, and the state has
+    no `last_lane_action` feature (it would be a constant 0).
     """
-
-    TARGET_VSL_LANE_ID = "vsl_zone_0"
-    LANE_CLOSED_SPEED_MPS = 5.0
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -31,10 +25,7 @@ class RLController(SumoEnv):
         self.green_time_actions_sec = np.array(
             [5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 35.0, 40.0]
         )
-        self.lane_state_actions = np.array([0, 1])  # 0=open, 1=closed (VSL)
-        self.action_space_n = len(self.green_time_actions_sec) * len(
-            self.lane_state_actions
-        )  # 16
+        self.action_space_n = len(self.green_time_actions_sec)  # 8
 
         self.green_phase_index = 0
         self.red_phase_index = 1
@@ -63,12 +54,12 @@ class RLController(SumoEnv):
         self.outflow_detector_ids_reward = self.downstream_mainline_all_detector_ids
         self.ramp_queue_detector_id = "queue_sens"
 
-        # Macro-only state: 15 features (14 macro + last_lane_action). No micro grid.
-        self.observation_space_n = 15
+        # Macro-only state: 8 features (7 aggregate macro + last_green_time).
+        # Matches `rm_lcc_macro_with_setMaxSpeed` minus the `last_lane_action`
+        # bit (which would be a constant 0 here).
+        self.observation_space_n = 8
 
         self.last_action_value_sec = self.green_time_actions_sec[0]
-        self.last_lane_action = 0  # 0=open, 1=closed
-        self.lane_default_speed_mps = None  # captured at reset (post SUMO start)
 
         self._reset_cycle_aggregators()
 
@@ -105,7 +96,6 @@ class RLController(SumoEnv):
             "current_tl_phase_index": -1,
             "current_tl_ryg_state": "N/A",
             "chosen_green_time_sec": 0.0,
-            "lane_closed": 0,
             "reward_outflow_speed_comp": 0.0,
             "reward_throughput_comp": 0.0,
             "penalty_ramp_queue_comp": 0.0,
@@ -134,34 +124,6 @@ class RLController(SumoEnv):
         self.list_interval_outflow_speed = []
         self.sum_queue = 0
         self.current_ramp_queue_veh = 0
-
-    def _apply_lane_vsl(self, lane_idx):
-        """Apply the chosen lane-VSL action to the target lane via TraCI."""
-        if self.lane_default_speed_mps is None:
-            return
-        speed = (
-            self.LANE_CLOSED_SPEED_MPS if lane_idx == 1 else self.lane_default_speed_mps
-        )
-        traci.lane.setMaxSpeed(self.TARGET_VSL_LANE_ID, speed)
-
-        # VMS POI indicator
-        poi_id = "vsl_indicator_" + self.TARGET_VSL_LANE_ID
-        if poi_id not in traci.poi.getIDList():
-            shape = traci.lane.getShape(self.TARGET_VSL_LANE_ID)
-            x, y = shape[0]
-            traci.poi.add(
-                poi_id,
-                x,
-                y,
-                (255, 255, 255, 255),
-                poiType="vms",
-                layer=100,
-                width=5,
-                height=5,
-            )
-
-        color = (255, 0, 0, 255) if lane_idx == 1 else (0, 255, 0, 255)
-        traci.poi.setColor(poi_id, color)
 
     def _collect_data_at_cycle_end(self):
         self.processed_flow_upstream_vph = self.get_loops_flow_interval(
@@ -200,41 +162,12 @@ class RLController(SumoEnv):
             else 0.0
         )
 
-        self.processed_flow_lane_0_merging_vph = self.get_loops_flow_interval(
-            [self.bottleneck_detector_ids_state[0]], self.CYCLE_DURATION_SEC
-        )
-        self.processed_occ_lane_0_bottleneck_percent = (
-            self.get_loops_occupancy_interval([self.bottleneck_detector_ids_state[0]])
-        )
-        self.processed_speed_lane_0_bottleneck_mps = self.get_loops_mean_speed_interval(
-            [self.bottleneck_detector_ids_state[0]]
-        )
-
-        self.processed_flow_lane_0_upstream_vph = self.get_loops_flow_interval(
-            [self.upstream_detector_ids_state[1]], self.CYCLE_DURATION_SEC
-        )
-        self.processed_occ_lane_0_upstream_percent = self.get_loops_occupancy_interval(
-            [self.upstream_detector_ids_state[1]]
-        )
-        self.processed_speed_lane_0_upstream_mps = self.get_loops_mean_speed_interval(
-            [self.upstream_detector_ids_state[1]]
-        )
-
     def reset(self):
         self.simulation_reset()
         self._reset_cycle_aggregators()
         self.last_action_value_sec = self.green_time_actions_sec[0]
-        self.last_lane_action = 0
         self._initialize_last_detailed_info_placeholders()
         self._last_detailed_info.update(super().log_info())
-
-        # Capture the lane's default max speed once the network is loaded.
-        try:
-            self.lane_default_speed_mps = traci.lane.getMaxSpeed(
-                self.TARGET_VSL_LANE_ID
-            )
-        except traci.TraCIException:
-            self.lane_default_speed_mps = self.FREEFLOW_SPEED_MPS
 
         if self.ramp_meter_id and self.red_phase_index != -1:
             self.set_phase(self.ramp_meter_id, self.red_phase_index)
@@ -276,7 +209,6 @@ class RLController(SumoEnv):
                 "current_tl_phase_index": current_phase_index_init,
                 "current_tl_ryg_state": current_ryg_state_init,
                 "chosen_green_time_sec": self.last_action_value_sec,
-                "lane_closed": self.last_lane_action,
             }
         )
         self._last_detailed_info.update(super().log_info())
@@ -287,12 +219,8 @@ class RLController(SumoEnv):
         if not (0 <= action_index < self.action_space_n):
             action_index = np.clip(action_index, 0, self.action_space_n - 1).item()
 
-        green_idx = int(action_index) % len(self.green_time_actions_sec)
-        lane_idx = int(action_index) // len(self.green_time_actions_sec)
-
-        chosen_green_time_sec = self.green_time_actions_sec[green_idx]
+        chosen_green_time_sec = self.green_time_actions_sec[int(action_index)]
         self.last_action_value_sec = chosen_green_time_sec
-        self.last_lane_action = lane_idx
 
         red_time_sec = self.CYCLE_DURATION_SEC - chosen_green_time_sec
         if red_time_sec < 0:
@@ -300,15 +228,11 @@ class RLController(SumoEnv):
 
         self._reset_cycle_aggregators()
 
-        # Apply the green phase first. The lane VSL is only active during this
-        # sub-phase so that ramp vehicles released by the green light get a
-        # clear merge corridor; the lane reopens for the red sub-phase below.
         if (
             self.ramp_meter_id
             and self.green_phase_index != -1
             and chosen_green_time_sec > 0
         ):
-            self._apply_lane_vsl(lane_idx)
             self.set_phase(self.ramp_meter_id, self.green_phase_index)
             self.set_phase_duration(self.ramp_meter_id, chosen_green_time_sec)
             if self.sim_step_length > 0:
@@ -326,11 +250,6 @@ class RLController(SumoEnv):
                     self.ON_RAMP_EDGE
                 )
 
-        # Reopen the controlled lane before running the red sub-phase, so that
-        # mainline traffic flows freely while no ramp vehicles are released.
-        self._apply_lane_vsl(0)
-
-        # Apply the red phase next
         if self.ramp_meter_id and self.red_phase_index != -1 and red_time_sec > 0:
             self.set_phase(self.ramp_meter_id, self.red_phase_index)
             self.set_phase_duration(self.ramp_meter_id, red_time_sec)
@@ -378,7 +297,6 @@ class RLController(SumoEnv):
             "current_tl_phase_index": current_phase_index,
             "current_tl_ryg_state": current_ryg_state,
             "chosen_green_time_sec": chosen_green_time_sec,
-            "lane_closed": int(lane_idx),
             "reward_outflow_speed_comp": self._reward_outflow_speed(),
             "reward_throughput_comp": self._reward_throughput(),
             "penalty_ramp_queue_comp": self._penalty_ramp_queue(),
@@ -422,42 +340,6 @@ class RLController(SumoEnv):
             0,
             1,
         )
-        norm_flow_lane_0_bottleneck = np.clip(
-            self.processed_flow_lane_0_merging_vph
-            / (self.MAX_LANE_FLOW_VPH if self.MAX_LANE_FLOW_VPH > 0 else 1.0),
-            0,
-            1,
-        )
-        norm_flow_lane_0_upstream = np.clip(
-            self.processed_flow_lane_0_upstream_vph
-            / (self.MAX_LANE_FLOW_VPH if self.MAX_LANE_FLOW_VPH > 0 else 1.0),
-            0,
-            1,
-        )
-        norm_occ_lane_0_bottleneck = np.clip(
-            self.processed_occ_lane_0_bottleneck_percent
-            / (self.MAX_OCCUPANCY_PERCENT if self.MAX_OCCUPANCY_PERCENT > 0 else 0.0),
-            0,
-            1,
-        )
-        norm_speed_lane_0_bottleneck = np.clip(
-            self.processed_speed_lane_0_bottleneck_mps
-            / (self.FREEFLOW_SPEED_MPS if self.FREEFLOW_SPEED_MPS > 0 else 1.0),
-            0,
-            1,
-        )
-        norm_occ_lane_0_upstream = np.clip(
-            self.processed_occ_lane_0_upstream_percent
-            / (self.MAX_OCCUPANCY_PERCENT if self.MAX_OCCUPANCY_PERCENT > 0 else 0.0),
-            0,
-            1,
-        )
-        norm_speed_lane_0_upstream = np.clip(
-            self.processed_speed_lane_0_upstream_mps
-            / (self.FREEFLOW_SPEED_MPS if self.FREEFLOW_SPEED_MPS > 0 else 1.0),
-            0,
-            1,
-        )
         norm_last_action = np.clip(
             self.last_action_value_sec
             / (self.CYCLE_DURATION_SEC if self.CYCLE_DURATION_SEC > 0 else 1.0),
@@ -467,7 +349,7 @@ class RLController(SumoEnv):
 
         state = np.array(
             [
-                # main macro features
+                # loop detector features (normalized flow, occupancy, speed)
                 norm_flow_upstream,
                 norm_flow_merging,
                 norm_occ_upstream,
@@ -475,16 +357,8 @@ class RLController(SumoEnv):
                 norm_occ_bottleneck,
                 norm_speed_bottleneck,
                 norm_ramp_queue,
-                # lane-0 features
-                norm_flow_lane_0_bottleneck,
-                norm_flow_lane_0_upstream,
-                norm_occ_lane_0_bottleneck,
-                norm_speed_lane_0_bottleneck,
-                norm_occ_lane_0_upstream,
-                norm_speed_lane_0_upstream,
-                # last action features
+                # last action (normalized green time)
                 norm_last_action,
-                float(self.last_lane_action),
             ],
             dtype=np.float32,
         )
@@ -568,26 +442,24 @@ class RLController(SumoEnv):
         return 0.0
 
     def _calculate_reward(self):
-
-        # reward weights
         w_speed_merge = 1.5
         w_speed_up = 1.0
         w_speed_down = 0.5
+
         w_occ_bottle = 2.0
         w_occ_upstream = 1.0
-        w_queue = 1.0
+        w_queue = 5.0
         w_spillback = 20.0
 
-        # reward components
         r_speed_merge = self._reward_merging_speed()
         r_speed_up = self._reward_upstream_speed()
         r_speed_down = self._reward_outflow_speed()
+
         p_occ_bottle = self._penalty_bottleneck_occ()
         p_occ_upstream = self._penalty_upstream_occ()
         p_queue = self._penalty_ramp_queue()
         p_spillback = self._penalty_spillback()
 
-        # reward calculation: weighted sum of the components
         reward = (
             (w_speed_merge * r_speed_merge)
             + (w_speed_up * r_speed_up)
