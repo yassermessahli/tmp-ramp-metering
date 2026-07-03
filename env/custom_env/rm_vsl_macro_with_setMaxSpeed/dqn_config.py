@@ -14,7 +14,7 @@ MAX_AGENT_STEPS_PER_EPISODE = int(
 
 # Variant tag is appended to save/log dirs so this experiment does not
 # collide with the prior variants' checkpoints/logs.
-VARIANT_TAG = "lane_control_macro_only"
+VARIANT_TAG = "joint_rm_vsl_42"
 
 HYPER_PARAMS = {
     "gpu": "0",
@@ -44,9 +44,9 @@ HYPER_PARAMS = {
 
 
 def network_config(input_dim_space):
-    """MLP body for the 14-d macro state.
+    """MLP body for the 15-d macro state.
 
-    Action-head width (16) is set by the framework from env.action_space.n.
+    Action-head width (42) is set by the framework from env.action_space.n.
     """
     num_input_features = input_dim_space.shape[0]
 

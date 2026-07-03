@@ -1,6 +1,6 @@
 # Copilot.md
 
-This file provides guidance to Claude Code (anthropic/claude-code) when working with code in this repository.
+This file provides guidance to Copilot (copilot.github.com) when working with code in this repository.
 
 ---
 
@@ -174,24 +174,24 @@ Agent (abstract)
 
 ## Active Configuration
 
-| Parameter               | Value                                                       |
-| ----------------------- | ----------------------------------------------------------- |
-| Algorithm               | `DuelingDoubleDQNAgent`                                     |
-| State dimension         | 15 (macro-only + last RM action + last VSL speed)           |
+| Parameter               | Value                                    |
+| ----------------------- | ---------------------------------------- |
+| Algorithm               | `DuelingDoubleDQNAgent`                  |
+| State dimension         | 15 (macro-only + last RM action + last VSL speed) |
 | Action space            | 42 discrete joint actions (7 RM green times × 6 VSL speeds) |
-| Control cycle           | 40 seconds                                                  |
-| Learning rate           | 1e-4 (Adam)                                                 |
-| Discount (γ)            | 0.99                                                        |
-| Epsilon                 | 1.0 → 0.01 (exponential, over 2M steps)                     |
-| Batch size              | 32                                                          |
-| Replay buffer           | 1M transitions (uniform sampling)                           |
-| Min buffer before learn | 100K transitions                                            |
-| Target update freq      | 30000                                                       |
-| Target update           | Soft Polyak (τ = 1e-3) every step                           |
-| Loss                    | SmoothL1Loss (Huber)                                        |
-| Max training steps      | 2.1M agent steps                                            |
-| Episode length          | 3600s (1 hour sim time, ~90 steps)                          |
-| Variant tag             | `joint_rm_vsl_42`                                           |
+| Control cycle           | 40 seconds                               |
+| Learning rate           | 1e-4 (Adam)                              |
+| Discount (γ)            | 0.99                                     |
+| Epsilon                 | 1.0 → 0.01 (exponential, over 2M steps)  |
+| Batch size              | 32                                       |
+| Replay buffer           | 1M transitions (uniform sampling)        |
+| Min buffer before learn | 100K transitions                         |
+| Target update freq      | 30000                                    |
+| Target update           | Soft Polyak (τ = 1e-3) every step        |
+| Loss                    | SmoothL1Loss (Huber)                     |
+| Max training steps      | 2.1M agent steps                         |
+| Episode length          | 3600s (1 hour sim time, ~90 steps)       |
+| Variant tag             | `joint_rm_vsl_42`                        |
 
 ---
 
@@ -376,17 +376,17 @@ train.py  →  CustomEnvWrapper(DqnEnv("train"))
 
 ### Where to Make Changes
 
-| Goal                            | File(s) to Edit                                                                                                |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| **Change reward weights**       | `env/custom_env/rm_lcc_macro_with_setMaxSpeed/rl_controller.py` (`_calculate_reward`)                          |
-| **Add/remove state features**   | `_get_current_observation()` and `observation_space_n` in `.../rm_lcc_macro_with_setMaxSpeed/rl_controller.py` |
-| **Change joint action space**   | `green_time_actions_sec`, `vsl_speed_actions_mps`, and `action_space_n` in `.../rl_controller.py`              |
-| **Change lane VSL behavior**    | `TARGET_VSL_LANE_ID`, `VSL_SPEEDS_MPS`, `_apply_lane_vsl()` in `.../rl_controller.py`                          |
-| **Change network architecture** | `env/custom_env/rm_lcc_macro_with_setMaxSpeed/dqn_config.py` (`network_config`)                                |
-| **Change hyperparameters**      | `env/custom_env/rm_lcc_macro_with_setMaxSpeed/dqn_config.py` (`HYPER_PARAMS`)                                  |
-| **Change demand distributions** | `env/custom_env/utils.py:33` (`SUMO_PARAMS`)                                                                   |
-| **Switch algorithm**            | `HYPER_PARAMS["algo"]` in `env/custom_env/rm_lcc_macro_with_setMaxSpeed/dqn_config.py`                         |
-| **Switch to another variant**   | Point `DqnEnv` to a different controller/config pair under `env/custom_env/`                                   |
+| Goal                            | File(s) to Edit                                                                                                            |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| **Change reward weights**       | `env/custom_env/rm_lcc_macro_with_setMaxSpeed/rl_controller.py` (`_calculate_reward`)                                    |
+| **Add/remove state features**   | `_get_current_observation()` and `observation_space_n` in `.../rm_lcc_macro_with_setMaxSpeed/rl_controller.py`          |
+| **Change joint action space**   | `green_time_actions_sec`, `vsl_speed_actions_mps`, and `action_space_n` in `.../rl_controller.py`                      |
+| **Change lane VSL behavior**    | `TARGET_VSL_LANE_ID`, `VSL_SPEEDS_MPS`, `_apply_lane_vsl()` in `.../rl_controller.py`                                   |
+| **Change network architecture** | `env/custom_env/rm_lcc_macro_with_setMaxSpeed/dqn_config.py` (`network_config`)                                          |
+| **Change hyperparameters**      | `env/custom_env/rm_lcc_macro_with_setMaxSpeed/dqn_config.py` (`HYPER_PARAMS`)                                            |
+| **Change demand distributions** | `env/custom_env/utils.py:33` (`SUMO_PARAMS`)                                                                               |
+| **Switch algorithm**            | `HYPER_PARAMS["algo"]` in `env/custom_env/rm_lcc_macro_with_setMaxSpeed/dqn_config.py`                                   |
+| **Switch to another variant**   | Point `DqnEnv` to a different controller/config pair under `env/custom_env/`                                              |
 
 ---
 

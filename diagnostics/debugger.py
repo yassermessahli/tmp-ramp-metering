@@ -1,14 +1,18 @@
-"""Constant-action GUI runner for visually verifying the LCC mechanism.
+"""Constant-action GUI runner for visually verifying the joint RM + VSL mechanism.
 
 Runs the *current active variant* (whatever env/custom_env/__init__.py exports) in the
 SUMO GUI with no trained model. A trivial constant policy feeds a hardcoded action every
-cycle — default action 8 = 5s green, lane_idx=1 (lane closed) — so you can watch whether
-mainline vehicles divert out of the controlled lane before the merge.
+cycle — default action 0 = 10s green, 50 km/h VSL — so you can watch the ramp meter
+and speed-limit indicator respond in real time.
+
+Action space is 42 = 7 green-time choices × 6 VSL speeds.
+    green_idx = action % 7  -> green time in {10,15,...,40} s
+    vsl_idx   = action // 7 -> VSL speed in {50,60,70,80,90,100} km/h
 
 Smooth motion comes from <step-length value="0.1"/> in the sumocfg (revert it before training).
 
 Run:
-    uv run python diagnostics/watch_lcc.py -action 8 -seed 42
+    uv run python diagnostics/debugger.py -action 0 -seed 42
 """
 
 import argparse
@@ -34,8 +38,8 @@ class ConstantPolicy:
         return [self.action for _ in obs_batch]
 
 
-class WatchLCC(View):
-    """Visualizes the LCC mechanism under a fixed, lane-closing action."""
+class Debugger(View):
+    """Visualizes the joint RM + VSL mechanism under a fixed action."""
 
     def __init__(self, args):
         # Set SUMO seed before SUMO starts (read by sumo_env.set_params())
@@ -69,34 +73,29 @@ class WatchLCC(View):
         """Resets environment for a new episode."""
         # CustomEnvWrapper.reset() returns (obs, info) — unpack it (observe.py omits this).
         self.obs, _info = self.env.reset()
-        self.ep_lane_closed_count = 0
 
     def close(self):
         """Closes the environment."""
         self.env.close()
 
     def loop(self):
-        """Applies the constant action and reports per-cycle lane state."""
+        """Applies the constant action and reports per-cycle state."""
         action = self.policy.actions([self.obs.tolist()])[0]
 
         self.obs, reward, terminated, truncated, info = self.env.step(action)
         done = terminated or truncated
 
-        if info.get("lane_closed", 0) == 1:
-            self.ep_lane_closed_count += 1
-
+        vsl_kmh = info.get("chosen_vsl_speed_mps", 0) * 3.6
         print(
             f"t={info.get('sim_time', 0):>7.1f}s  "
             f"green={info.get('chosen_green_time_sec', 0):>4.1f}s  "
-            f"lane_closed={info.get('lane_closed', 0)}  "
+            f"vsl={vsl_kmh:>5.1f}km/h  "
             f"reward={reward:>6.2f}"
         )
 
         if done:
             self.ep += 1
-            print(
-                f"\nEpisode {self.ep} done — lane closed {self.ep_lane_closed_count} cycles\n"
-            )
+            print(f"\nEpisode {self.ep} done\n")
 
             if bool(self.max_episodes) and self.ep >= self.max_episodes:
                 self.env.close()
@@ -106,13 +105,13 @@ class WatchLCC(View):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="WATCH LCC")
+    parser = argparse.ArgumentParser(description="DEBUGGER")
 
     parser.add_argument(
         "-action",
         type=int,
-        default=8,
-        help="Constant action index (8-15 close the lane)",
+        default=0,
+        help="Constant action index 0-41 (green_idx = action%%7, vsl_idx = action//7)",
     )
     parser.add_argument(
         "-seed", type=int, default=-1, help="SUMO random seed (-1 = random)"
@@ -124,4 +123,4 @@ if __name__ == "__main__":
         "-max_s", type=int, default=0, help="Max steps per episode if > 0, else inf"
     )
 
-    WatchLCC(parser.parse_args()).run()
+    Debugger(parser.parse_args()).run()
