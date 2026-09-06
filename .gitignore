@@ -7,6 +7,7 @@ logs/test/*
 logs/evaluation/*
 logs/train/*
 evaluation/notebooks/plots
+.ipynb_checkpoints/
 
 # SUMO outputs
 env/custom_env/data/1ramp_1x3/induction_loop_data/

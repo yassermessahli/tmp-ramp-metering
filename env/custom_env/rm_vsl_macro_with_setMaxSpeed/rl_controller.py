@@ -26,11 +26,13 @@ class RLController(SumoEnv):
 
         self.green_time_actions_sec = np.array(
             [10.0, 15.0, 20.0, 25.0, 30.0, 35.0, 40.0]
-        )
-        self.vsl_speed_actions_mps = np.array([13.89, 16.67, 19.44, 22.22, 25.0, 27.78])
+        )  # 7 green time levels
+        self.vsl_speed_actions_mps = np.array(
+            [13.89, 16.67, 19.44, 22.22, 25.0, 27.78]
+        )  # 6 speed limit levels
         self.action_space_n = len(self.green_time_actions_sec) * len(
             self.vsl_speed_actions_mps
-        )  # 42
+        )  # total 42 actions
 
         self.green_phase_index = 0
         self.red_phase_index = 1
@@ -59,7 +61,7 @@ class RLController(SumoEnv):
         self.outflow_detector_ids_reward = self.downstream_mainline_all_detector_ids
         self.ramp_queue_detector_id = "queue_sens"
 
-        # Macro-only state: 15 features (14 macro + last green + last VSL speed). No micro grid.
+        # Macro-only state: 15 features (13 macro + last green + last VSL speed). No micro grid.
         self.observation_space_n = 15
 
         self.last_green_time_sec = self.green_time_actions_sec[0]
@@ -295,26 +297,28 @@ class RLController(SumoEnv):
         return self._get_current_observation()
 
     def step(self, action_index):
+
         if not (0 <= action_index < self.action_space_n):
             action_index = np.clip(action_index, 0, self.action_space_n - 1).item()
-
+        
+        # get the green time action
         green_idx = int(action_index) % len(self.green_time_actions_sec)
-        vsl_idx = int(action_index) // len(self.green_time_actions_sec)
-
         chosen_green_time_sec = self.green_time_actions_sec[green_idx]
-        chosen_vsl_speed_mps = self.vsl_speed_actions_mps[vsl_idx]
         self.last_green_time_sec = chosen_green_time_sec
+
+        red_time_sec = self.CYCLE_DURATION_SEC - chosen_green_time_sec # deduce the red time
+        
+        # get the VSL speed action
+        vsl_idx = int(action_index) // len(self.green_time_actions_sec)
+        chosen_vsl_speed_mps = self.vsl_speed_actions_mps[vsl_idx]
         self.last_vsl_speed_mps = chosen_vsl_speed_mps
 
-        red_time_sec = self.CYCLE_DURATION_SEC - chosen_green_time_sec
-        if red_time_sec < 0:
-            red_time_sec = 0.0
 
         self._reset_cycle_aggregators()
 
-        # Apply the green phase first. The lane VSL is only active during this
-        # sub-phase so that ramp vehicles released by the green light get a
-        # clear merge corridor; the lane reopens for the red sub-phase below.
+        # Apply the green phase first. 
+        # The lane VSL is only active during this sub-phase so that ramp vehicles released by 
+        # the green light get a clear merge corridor; the lane reopens for the red sub-phase below.
         if (
             self.ramp_meter_id
             and self.green_phase_index != -1

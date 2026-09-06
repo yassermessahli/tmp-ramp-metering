@@ -2,7 +2,7 @@
 
 function run () {
 
-uv run python diagnostics/watch_lcc.py -action 11 -seed 42
+uv run python diagnostics/debugger.py -action 2 -seed 42
 
 }
 

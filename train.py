@@ -21,7 +21,7 @@ class Train:
         os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
 
         self.env = make_env(
-            env=CustomEnvWrapper(CustomEnv(type(self).__name__.lower())),
+            env=CustomEnvWrapper(CustomEnv("train")),
             repeat=args.repeat,
             max_episode_steps=args.max_episode_steps,
             n_env=args.n_env,

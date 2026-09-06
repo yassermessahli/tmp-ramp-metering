@@ -133,6 +133,7 @@ def main():
             "log_s": 1,
             "log_dir": args.output_dir,
             "headless": args.headless,
+            "seed": current_seed,
         }
 
         if strategy_class == Play:
