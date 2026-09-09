@@ -2,14 +2,11 @@ import argparse
 import itertools
 import os
 
-import numpy as np
 from colorama import Fore
 from tqdm import tqdm
 
 from dqn import Agents, CustomEnvWrapper, make_env
 from env import HYPER_PARAMS, CustomEnv, network_config
-
-BUFFER_SAVE_DIR = "./save/replay_buffer/"
 
 
 class Train:
@@ -21,7 +18,7 @@ class Train:
         os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
 
         self.env = make_env(
-            env=CustomEnvWrapper(CustomEnv("train")),
+            env=CustomEnvWrapper(CustomEnv(m="train")),
             repeat=args.repeat,
             max_episode_steps=args.max_episode_steps,
             n_env=args.n_env,
@@ -65,62 +62,14 @@ class Train:
         [print(arg, "=", getattr(args, arg)) for arg in vars(args)]
 
         self.max_total_steps = args.max_total_steps
-        self.load_buffer_path = args.load_buffer
-
-        obs_dim = self.env.observation_space.shape[0]
-        variant = os.path.basename(os.path.normpath(args.save_dir))
-        self.buffer_path = os.path.join(
-            BUFFER_SAVE_DIR,
-            f"{variant}_obs{obs_dim}_mem{self.agent.min_buffer_size}.npz",
-        )
-
-    def _save_buffer(self):
-        """Serialises the replay buffer to disk as a compressed npz archive."""
-        os.makedirs(BUFFER_SAVE_DIR, exist_ok=True)
-        buf = list(self.agent.replay_memory_buffer.replay_buffer)
-        obs      = np.array([t[0] for t in buf], dtype=np.float32)
-        actions  = np.array([t[1] for t in buf], dtype=np.int32)
-        rews     = np.array([t[2] for t in buf], dtype=np.float32)
-        dones    = np.array([t[3] for t in buf], dtype=bool)
-        new_obs  = np.array([t[4] for t in buf], dtype=np.float32)
-        np.savez_compressed(self.buffer_path, obs=obs, actions=actions, rews=rews, dones=dones, new_obs=new_obs)
-        size_mb = os.path.getsize(self.buffer_path) / 1e6
-        print(Fore.LIGHTCYAN_EX + f"Buffer saved → {self.buffer_path}  ({size_mb:.1f} MB)" + Fore.RESET)
-
-    def _load_buffer(self, path):
-        """Restores a previously saved buffer. Returns True on success, False otherwise."""
-        if not os.path.exists(path):
-            print(Fore.LIGHTRED_EX + f"Buffer file not found: {path} — filling from scratch." + Fore.RESET)
-            return False
-
-        data = np.load(path)
-        saved_obs_dim = data["obs"].shape[1]
-        expected_obs_dim = self.env.observation_space.shape[0]
-        if saved_obs_dim != expected_obs_dim:
-            print(
-                Fore.LIGHTRED_EX
-                + f"Buffer obs dim mismatch: file has {saved_obs_dim}-d, env expects {expected_obs_dim}-d. "
-                + "Filling from scratch."
-                + Fore.RESET
-            )
-            return False
-
-        deque = self.agent.replay_memory_buffer.replay_buffer
-        for obs, action, rew, done, new_obs in zip(
-            data["obs"], data["actions"], data["rews"], data["dones"], data["new_obs"], strict=False
-        ):
-            deque.append((obs, int(action), float(rew), bool(done), new_obs))
-
-        print(Fore.LIGHTCYAN_EX + f"Buffer loaded ← {path}  ({len(deque)} transitions)" + Fore.RESET)
-        return True
 
     def init_replay_memory_buffer(self):
-        """Fills replay buffer with initial experiences."""
+        """Fills replay buffer with initial experiences before training starts.
+        If resuming from a checkpoint, this uses the trained policy to quickly
+        gather high-quality, up-to-date experiences.
+        """
         print()
         print("Initialize Replay Memory Buffer")
-
-        if self.load_buffer_path and self._load_buffer(self.load_buffer_path):
-            return
 
         total_init = self.agent.min_buffer_size // self.agent.n_env
         obses = self.env.reset()
@@ -141,11 +90,11 @@ class Train:
                     ]
 
                 new_obses, rews, dones, _ = self.env.step(actions)
-                self.agent.store_transitions(obses, actions, rews, dones, new_obses, None)
+                self.agent.store_transitions(
+                    obses, actions, rews, dones, new_obses, None
+                )
                 obses = new_obses
                 pbar.update(self.agent.n_env)
-
-        self._save_buffer()
 
     def train_loop(self):
         """Executes main training loop."""
@@ -167,7 +116,9 @@ class Train:
 
                 actions = self.agent.choose_actions(obses)
                 new_obses, rews, dones, infos = self.env.step(actions)
-                self.agent.store_transitions(obses, actions, rews, dones, new_obses, infos)
+                self.agent.store_transitions(
+                    obses, actions, rews, dones, new_obses, infos
+                )
                 obses = new_obses
 
                 self.agent.learn()
@@ -180,7 +131,9 @@ class Train:
                     pbar.set_postfix(
                         eps=f"{self.agent.epsilon():.3f}",
                         ep=self.agent.episode_count,
-                        rew=f"{self.agent.info_mean('r'):.1f}" if self.agent.ep_info_buffer else "n/a",
+                        rew=f"{self.agent.info_mean('r'):.1f}"
+                        if self.agent.ep_info_buffer
+                        else "n/a",
                     )
 
                 if (
@@ -278,12 +231,6 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "-load", type=str2bool, default=HYPER_PARAMS["load"], help="Load model"
-    )
-    parser.add_argument(
-        "-load_buffer",
-        type=str,
-        default=None,
-        help="Path to a saved buffer .npz file to load instead of filling from scratch",
     )
     parser.add_argument(
         "-repeat", type=int, default=HYPER_PARAMS["repeat"], help="Steps repeat action"

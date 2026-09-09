@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<!-- generated on 2025-03-18 09:58:49 by Eclipse SUMO netedit Version 1.18.0
+<!-- generated on 2026-09-07T15:40:19.098342+01:00 by Eclipse SUMO netedit 1.27.0
 -->
 
 <additional xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/additional_file.xsd">
@@ -17,40 +17,7 @@
     <inductionLoop id="passage_queue_sens" lane="passage_area_0" pos="10.69" period="40.00" file="induction_loop_data/passage_queue_sens.xml"/>
     <inductionLoop id="passage_sens" lane="passage_area_0" pos="6.04" period="40.00" file="induction_loop_data/passage_sens.xml"/>
     <inductionLoop id="queue_sens" lane="on_ramp_0" pos="6.04" period="40.00" file="induction_loop_data/queue_sens.xml"/>
-    <inductionLoop id="up_stream_sens_0" lane="main_road_0" pos="391.00" period="40.00" file="induction_loop_data/up_stream_sens_0.xml"/>
-    <inductionLoop id="up_stream_sens_00" lane="main_road_0" pos="383.00" period="40.00" file="induction_loop_data/up_stream_sens_00.xml"/>
-    <inductionLoop id="up_stream_sens_1" lane="main_road_1" pos="391.00" period="40.00" file="induction_loop_data/up_stream_sens_1.xml"/>
-    <inductionLoop id="up_stream_sens_11" lane="main_road_1" pos="383.00" period="40.00" file="induction_loop_data/up_stream_sens_11.xml"/>
-    <inductionLoop id="up_stream_sens_2" lane="main_road_2" pos="391.00" period="40.00" file="induction_loop_data/up_stream_sens_2.xml"/>
-    <inductionLoop id="up_stream_sens_22" lane="main_road_2" pos="383.00" period="40.00" file="induction_loop_data/up_stream_sens_22.xml"/>
-
-
-
-
-    <tlLogic id="ramp_meter" type="static" programID="rl" offset="0">
-        <phase duration="5"  state="G"/>
-        <phase duration="5"  state="r"/>
-
-    </tlLogic>
-
-<!--  
-    <tlLogic id="ramp_meter" type="static" programID="mult_veh_per_green" offset="0">
-        <phase duration="6"  state="G"/>
-        <phase duration="3"  state="y"/>
-        <phase duration="2"  state="r"/>
-
-    </tlLogic>
-    
-    <tlLogic id="ramp_meter" type="static" programID="one_veh_per_green" offset="0">
-        <phase duration="3"  state="G"/>
-        <phase duration="2"  state="r"/>
-
-    </tlLogic>
--->
-    <!-- <tlLogic id="ramp_meter" type="static" programID="deactivated" offset="0">
-        <phase duration="5"  state="G"/>
-        
-    </tlLogic> -->
-
-
+    <inductionLoop id="up_stream_sens_0" lane="main_road_0" pos="308.26" period="40.00" file="induction_loop_data/up_stream_sens_0.xml"/>
+    <inductionLoop id="up_stream_sens_1" lane="main_road_1" pos="308.14" period="40.00" file="induction_loop_data/up_stream_sens_1.xml"/>
+    <inductionLoop id="up_stream_sens_2" lane="main_road_2" pos="307.96" period="40.00" file="induction_loop_data/up_stream_sens_2.xml"/>
 </additional>

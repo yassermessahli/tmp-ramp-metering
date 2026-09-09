@@ -30,9 +30,7 @@ class Observe(View):
         super().__init__(
             type(self).__name__.upper(),
             make_env(
-                env=CustomEnvWrapper(
-                    CustomEnv("observe", gui_override=gui_override)
-                ),
+                env=CustomEnvWrapper(CustomEnv("observe", gui_override=gui_override)),
                 max_episode_steps=args.max_s,
             ),
         )

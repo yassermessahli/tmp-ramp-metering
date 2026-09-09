@@ -29,7 +29,9 @@ class Network(nn.Module):
         pass
 
     def save(self, save_path, step, episode_count, rew_mean, len_mean):
-        """Serializes network parameters to disk."""
+        """Serializes network parameters and optimizer state to disk."""
+        import io
+
         params_dict = {
             "parameters": {
                 k: v.detach().cpu().numpy() for k, v in self.state_dict().items()
@@ -40,12 +42,19 @@ class Network(nn.Module):
             "len_mean": len_mean,
         }
 
+        if hasattr(self, "optimizer"):
+            buffer = io.BytesIO()
+            T.save(self.optimizer.state_dict(), buffer)
+            params_dict["optimizer_state"] = buffer.getvalue()
+
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         with open(save_path, "wb") as f:
             f.write(msgpack.dumps(params_dict))
 
     def load(self, load_path):
-        """Loads network parameters from disk."""
+        """Loads network parameters and optimizer state from disk."""
+        import io
+
         if not os.path.exists(load_path):
             raise FileNotFoundError(load_path)
 
@@ -57,6 +66,11 @@ class Network(nn.Module):
             for k, v in params_dict["parameters"].items()
         }
         self.load_state_dict(parameters)
+
+        if "optimizer_state" in params_dict and hasattr(self, "optimizer"):
+            buffer = io.BytesIO(params_dict["optimizer_state"])
+            opt_state = T.load(buffer, map_location=self.device, weights_only=False)
+            self.optimizer.load_state_dict(opt_state)
 
         return (
             params_dict["step"],
